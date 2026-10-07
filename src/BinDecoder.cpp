@@ -7,6 +7,7 @@
 
 #include "BinDecoder.h"
 
+#include <algorithm>
 #include <string>
 #include "MessageType.h"
 #include "XBTProfileDataRanges.h"
@@ -97,6 +98,10 @@ int BinDecoder::toInteger(int start, int end) {
         if (start < 0 || end < 0 || end - start <= 0) {
             return -999;
         }
+        // the file is too short to hold this value
+        if (end >= (int)bits.size()) {
+            return -999;
+        }
         end++;
         int bLength = end - start;
         stdex::bitvector b;
@@ -124,6 +129,24 @@ int BinDecoder::toInteger(int start, int end) {
         return integer;
 
 
+}
+
+/**
+ * This method returns how many of the measurement points are actually
+ * stored in the file. Truncated files hold fewer points than the times
+ * replicated field says.
+ *
+ * @param start the bit position of the first measurement point
+ * @param points the number of points the profile says it holds
+ * @param bSize the number of bits used by each point
+ * @return the number of points that can be read from the file
+ */
+int BinDecoder::getAvailablePoints(int start, int points, int bSize) {
+    int available = ((int)bits.size() - start) / bSize;
+    if (available < 0) {
+        available = 0;
+    }
+    return std::min(points, available);
 }
 
 int BinDecoder::getOldMessageType() {
@@ -569,6 +592,7 @@ std::vector<double> BinDecoder::getResistance() {
     if (points < 0) {
         return  std::vector<double>(1,0);
     }
+    points = getAvailablePoints(start, points, bSize);
 
     std::vector<double> temps(points,0);
     int counter = 0;
@@ -611,6 +635,7 @@ std::vector<double> BinDecoder::getResistancePoints() {
     if (points < 0) {
     	return  std::vector<double>(1,0);
     }
+    points = getAvailablePoints(start, points, bSize);
 
     std::vector<double> resistance(points,0);
     int counter = 0;
@@ -850,8 +875,9 @@ std::vector<double> BinDecoder::getTemperaturePoints() {
     int points = getTimesReplicated();
 
     if (points < 0) {
-    	std::vector<double>(1,0);
+    	return std::vector<double>(1,0);
     }
+    points = getAvailablePoints(start, points, 12);
 
     std::vector<double> temps(points,0);
     int counter = 0;

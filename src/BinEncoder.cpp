@@ -64,6 +64,21 @@ void BinEncoder::setBitWithinBits(stdex::bitvector &b, stdex::bitvector &subBits
     }
 }
 /**
+ * This method scales and offsets a value so it can be stored as an integer.
+ * Missing values are passed through so integerToBits can encode them.
+ *
+ * @param value the value to scale
+ * @param scale the scale factor
+ * @param offset the offset added after scaling
+ * @return the scaled value or MISSING_VALUE
+ */
+int BinEncoder::scaleValue(double value, double scale, double offset) {
+    if (value == MISSING_VALUE) {
+        return MISSING_VALUE;
+    }
+    return (int)std::round(value * scale + offset);
+}
+/**
  * This method extracts the bits from the integer passed and stores it in a
  * BitSet object.
  *
@@ -81,6 +96,10 @@ void BinEncoder::integerToBits(stdex::bitvector &b, int intValue, std::array<int
     startPos = range[0];
     endPos = range[1];
     int bitLength = endPos - startPos + 1;
+    // Amverseas encodes a missing value by setting every bit in the field.
+    if (intValue == MISSING_VALUE) {
+        intValue = -1;
+    }
     stdex::bitvector tempBS;
     tempBS = stdex::bitvector(bitLength);
     int bitZero;
@@ -144,9 +163,9 @@ void BinEncoder::stringToBits(stdex::bitvector &b, std::string stringValue, std:
  * the string.
  */
 void BinEncoder::encodeCommentBlocks(stdex::bitvector &b, std::string s, std::array<int,2> range, int blocks) {
-	stdex::bitvector tmpBitSet;
-	tmpBitSet = stdex::bitvector(8 * s.size());
-    tmpBitSet.set(8, true);
+    // Amverseas always writes whole 40 bit blocks, the unused characters
+    // of the last block are filled with zeros.
+    s.resize(5 * blocks, '\0');
     stringToBits(b, s, range);
 }
 /**
@@ -168,10 +187,10 @@ void BinEncoder::encodeProfile(XBTProfile &xBTProfile) {
 
     stringToBits(bits, xBTProfile.getWMOId(),XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::WMOID,newMessageType));
     integerToBits(bits, xBTProfile.getNewMessageType(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::NEW_MESSAGE_TYPE,newMessageType));
-    double latitude = std::round(xBTProfile.getLatitude() * 100000.0 + 9000000);
-    integerToBits(bits, (int)latitude, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::LATITUDE,newMessageType));
-    double longitude = std::round(xBTProfile.getLongitude() * 100000.0 + 18000000);
-    integerToBits(bits, (int)longitude, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::LONGITUDE,newMessageType));
+    int latitude = scaleValue(xBTProfile.getLatitude(), 100000.0, 9000000);
+    integerToBits(bits, latitude, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::LATITUDE,newMessageType));
+    int longitude = scaleValue(xBTProfile.getLongitude(), 100000.0, 18000000);
+    integerToBits(bits, longitude, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::LONGITUDE,newMessageType));
     stringToBits(bits, xBTProfile.getSoopLine(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SOOP_LINE,newMessageType));
     integerToBits(bits, xBTProfile.getTransectNumber(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::TRANSECT_NUM,newMessageType));
     integerToBits(bits, xBTProfile.getSequenceNumber(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEQUENCE_NUM,newMessageType));
@@ -187,25 +206,25 @@ void BinEncoder::encodeProfile(XBTProfile &xBTProfile) {
     integerToBits(bits, xBTProfile.getProbeSerialNumber(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::PROBE_SERIAL_NUMBER,newMessageType));
     integerToBits(bits, xBTProfile.getThisDataIs(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::THIS_DATA_IS,newMessageType));
     integerToBits(bits, xBTProfile.getDataQuality(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::DATA_QUALITY,newMessageType));
-    double launchHeight = std::round(xBTProfile.getLaunchHeight() * 100.0);
-    integerToBits(bits, (int)launchHeight, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::LAUNCH_HEIGHT,newMessageType));
-    double shipDirection = std::round(xBTProfile.getShipDirection());
-    integerToBits(bits, (int)shipDirection, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SHIP_DIRECTION,newMessageType));
-    double shipSpeed = std::round(xBTProfile.getShipSpeed() * 100.0);
-    integerToBits(bits, (int)shipSpeed, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SHIP_SPEED,newMessageType));
+    int launchHeight = scaleValue(xBTProfile.getLaunchHeight(), 100.0);
+    integerToBits(bits, launchHeight, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::LAUNCH_HEIGHT,newMessageType));
+    int shipDirection = scaleValue(xBTProfile.getShipDirection(), 1.0);
+    integerToBits(bits, shipDirection, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SHIP_DIRECTION,newMessageType));
+    int shipSpeed = scaleValue(xBTProfile.getShipSpeed(), 100.0);
+    integerToBits(bits, shipSpeed, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SHIP_SPEED,newMessageType));
     integerToBits(bits, xBTProfile.getInstrumentType(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::INSTRUMENT_TYPE,newMessageType));
     integerToBits(bits, xBTProfile.getRecorderType(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::RECORDER_TYPE,newMessageType));
     integerToBits(bits, xBTProfile.getWindInstrumentType(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::WIND_INSTRUMENT_TYPE,newMessageType));
     double windDirection = xBTProfile.getWindDirection();
     integerToBits(bits, (int)windDirection, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::WIND_DIRECTION,newMessageType));
-    double windSpeed = std::round(xBTProfile.getWindSpeed() * 10.0);
-    integerToBits(bits, (int)windSpeed , XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::WIND_SPEED,newMessageType));
-    double dryBulbTemperature = std::round(xBTProfile.getDryBulbTemperature() * 10.0);
-    integerToBits(bits, (int)dryBulbTemperature, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::DRY_BULB_TEMPERATURE,newMessageType));
+    int windSpeed = scaleValue(xBTProfile.getWindSpeed(), 10.0);
+    integerToBits(bits, windSpeed, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::WIND_SPEED,newMessageType));
+    int dryBulbTemperature = scaleValue(xBTProfile.getDryBulbTemperature(), 10.0);
+    integerToBits(bits, dryBulbTemperature, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::DRY_BULB_TEMPERATURE,newMessageType));
     integerToBits(bits, xBTProfile.getSeaSurfaceCurrentMeasurementMethod(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_CURRENT_MEASURING_METHOD,newMessageType));
     integerToBits(bits, xBTProfile.getSeaSurfaceCurrentDirection(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_CURRENT_DIRECTION,newMessageType));
-    double seaSurfaceCurrentSpeed = std::round(xBTProfile.getSeaSurfaceCurrentSpeed() * 100.00);
-    integerToBits(bits, (int)seaSurfaceCurrentSpeed, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_CURRENT_SPEED,newMessageType));
+    int seaSurfaceCurrentSpeed = scaleValue(xBTProfile.getSeaSurfaceCurrentSpeed(), 100.0);
+    integerToBits(bits, seaSurfaceCurrentSpeed, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_CURRENT_SPEED,newMessageType));
     integerToBits(bits, xBTProfile.getTotalWaterDepth(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::TOTAL_WATER_DEPTH,newMessageType));
     integerToBits(bits, xBTProfile.getAgencyOwner(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::AGENCY_OWNER,newMessageType));
     integerToBits(bits, xBTProfile.getXBTLauncherType(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::XBT_LAUNCHER_TYPE,newMessageType));
@@ -216,9 +235,12 @@ void BinEncoder::encodeProfile(XBTProfile &xBTProfile) {
     integerToBits(bits, xBTProfile.getXBTProbeManufacturedYear(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::XBT_PROBE_MANUFACTURE_YEAR,newMessageType));
     integerToBits(bits, xBTProfile.getXBTProbeManufacturedMonth(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::XBT_PROBE_MANUFACTURE_MONTH,newMessageType));
     integerToBits(bits, xBTProfile.getXBTProbeManufacturedDay(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::XBT_PROBE_MANUFACTURE_DAY,newMessageType));
-    integerToBits(bits, xBTProfile.getNumberOfRiderInstitutionBlocks(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::NUMBER_OF_RIDER_INSTITUTION_BLOCKS,newMessageType));
-    integerToBits(bits, xBTProfile.getNumberOfRiderEmailBlocks(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::NUMBER_OF_RIDER_EMAIL_BLOCKS,newMessageType));
-    integerToBits(bits, xBTProfile.getNumberOfRiderPhoneBlocks(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::NUMBER_OF_RIDER_PHONE_BLOCKS,newMessageType));
+    // Amverseas defaults the rider block counts to 0, the real counts are
+    // written below when the rider strings are encoded.
+    integerToBits(bits, 0, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::NUMBER_OF_RIDER_BLOCKS,newMessageType));
+    integerToBits(bits, 0, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::NUMBER_OF_RIDER_INSTITUTION_BLOCKS,newMessageType));
+    integerToBits(bits, 0, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::NUMBER_OF_RIDER_EMAIL_BLOCKS,newMessageType));
+    integerToBits(bits, 0, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::NUMBER_OF_RIDER_PHONE_BLOCKS,newMessageType));
 
 
     //********************Encode measurement points************************
@@ -427,7 +449,7 @@ void BinEncoder::setMessageCRC(stdex::bitvector &b) {
 
 	integerToBits(b, 0xFFFFFFFF,XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::UNIQUE_TAG, newMessageType));
 	uint8_t x = 0;
-	char buf[b.size()/8]={0};
+	std::vector<char> buf(b.size()/8, 0);
 	uint32_t crc;
 
 	for (unsigned int i = 0; i < b.size(); i++) {
@@ -442,7 +464,7 @@ void BinEncoder::setMessageCRC(stdex::bitvector &b) {
 
 	}//end for
 
-	crc = computeCRC32(buf,b.size()/8);
+	crc = computeCRC32(buf.data(),b.size()/8);
 
 	integerToBits(b, crc, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::UNIQUE_TAG, newMessageType));
 }

@@ -5,6 +5,13 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS "-Os -fno-rtti ")
 
+# Do not fuse multiplications and additions so the floating point results,
+# like the inflection points, match the Java version of this library on
+# every platform.
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-ffp-contract=off)
+endif()
+
 # Find source files
 file(GLOB SOURCES src/*.cpp)
 

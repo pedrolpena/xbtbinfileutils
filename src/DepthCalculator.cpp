@@ -516,101 +516,139 @@ double DepthCalculator::GetSmoothTempAtDepth(int Depth,std::vector <double> *s) 
 	return (float) RetTemp;
 }
 
+namespace {
+
+// Temperatures at or above this value are treated as bad data at the bottom
+// of the profile. Amverseas uses the same limit.
+constexpr double MAX_VALID_TEMPERATURE = 34.5;
+// Temperatures below this value are treated as bad data at the bottom of the
+// profile.
+constexpr double MIN_VALID_TEMPERATURE = -2.5;
+// Largest temperature step allowed between the last two points of the
+// profile. Larger steps are removed from the bottom of the profile, they
+// are usually caused by the wire breaking or the probe hitting the bottom.
+constexpr double TAIL_MAX_STEP = 0.2;
+// Number of points on each side of a point used by the median filter.
+constexpr int MEDIAN_HALF_WINDOW = 5;
+// Largest temperature difference allowed between the profile and the line
+// drawn through the inflection points. Amverseas starts with the same value.
+constexpr double INFLECTION_TOLERANCE = 0.15;
+
+/**
+ * Returns the median of the points from start to end inclusive. The number
+ * of points is always odd.
+ */
+double median(const std::vector<double> &values, int start, int end) {
+	std::vector<double> window(values.begin() + start, values.begin() + end + 1);
+	std::sort(window.begin(), window.end());
+	return window[window.size() / 2];
+}
+
+/**
+ * Returns the temperature difference between a point and the line drawn
+ * between two other points.
+ */
+double deviation(const std::vector<double> &depths, const std::vector<double> &temps, int first, int last, int point) {
+	double fraction = (depths[point] - depths[first]) / (depths[last] - depths[first]);
+	double lineTemp = temps[first] + (temps[last] - temps[first]) * fraction;
+	return std::fabs(temps[point] - lineTemp);
+}
+
+} // namespace
+
+/**
+ * This method selects the inflection points of a profile. Linear
+ * interpolation between the inflection points reproduces the profile within
+ * INFLECTION_TOLERANCE degrees, using at most MAXINFPTS points.
+ *
+ * Bad data at the bottom of the profile is removed first and the profile is
+ * smoothed with a median filter. The first and last points are always
+ * selected, then the point farthest from the line through the selected
+ * points is added until every point is within the tolerance or MAXINFPTS
+ * points have been selected. When two points are equally far the shallower
+ * one is selected.
+ *
+ * The Java version of this library implements the same algorithm and must
+ * return the same points.
+ *
+ * @param depthsAndTemps the depths and temperatures of the profile
+ * @return the depths and smoothed temperatures of the inflection points
+ */
 std::vector<std::vector<double> > DepthCalculator::getInflectionPoints( std::vector<std::vector<double> > depthsAndTemps) {
 
 	std::vector<std::vector<double> > infPoints; // holds computed inflection points
-	std::vector< double > infPoint; // holds computed inflection point
 
-	double
-	Dk0, //Depth 0
-	Dk1, //Depth 1
-	Dk2, //Depth 2
-	Tk0, //Temp  0
-	Tk1, //Temp  1
-	Tk2, //Temp  2
-	dD0, //Difference between 1st two adjacent depths
-	dD1, //Difference between 2nd two adjacent depths
-	dT0, //Difference between 1st two adjacent temperatures
-	dT1, //Difference between 2nd two adjacent temperatures
-	SLOPE0, // Trailing slope (velocity)
-	SLOPE1, // Leading slope (velocity)
-	accelerationCurrent,   //Current acceleration
-	accelerationPrevious = 0;  //Previous acceleration
-
-
-
-	for (unsigned int k = 0; k < depthsAndTemps.size() - 2; k++) {
-
-		// extract temperatures and depths for analysis
-		Dk0 = depthsAndTemps[ k + 0 ][ 0 ],
-		Dk1 = depthsAndTemps[ k + 1 ][ 0 ],
-		Dk2 = depthsAndTemps[ k + 2 ][ 0 ],
-		Tk0 = depthsAndTemps[ k + 0 ][ 1 ],
-		Tk1 = depthsAndTemps[ k + 1 ][ 1 ],
-		Tk2 = depthsAndTemps[ k + 2 ][ 1 ];
-
-
-		// compute deltas
-		dD0 = Dk0 - Dk1;
-		dD1 = Dk1 - Dk2;
-		dT0 = Tk0 - Tk1;
-		dT1 = Tk1 - Tk2;
-
-
-		/* Make sure neither of the deltas in the denominator is zero
-		 * before computing slopes and acceleration.
-		 **/
-		if( dT0 * dT1 !=0 ){
-
-
-			// compute trailing and leading slope (velocity)
-			SLOPE0 = dD0/dT0;
-			SLOPE1 = dD1/dT1;
-
-
-			// compute acceleration
-			accelerationCurrent = dD0/( dT0 * dT0 ) - dD1/( dT0 * dT1 );
-
-
-
-			/*
-			 * Since we are dealing with discrete points, there is no guarantee
-			 * that a point will match up exactly with a slope of 0. this means
-			 * that this algorithm will also identify relative extrema. To skip
-			 * relative extrema the product of the trailing and leading slopes
-			 * is looked at. The product will only be negative when direction
-			 * changes. In other words, concavity hasn't changed.
-			 * */
-			if (accelerationCurrent *accelerationPrevious  < 0 && SLOPE0 * SLOPE1 > 0 && infPoints.size() < MAXINFPTS){
-
-				infPoint.push_back(Dk1);
-				infPoint.push_back(Tk1);
-
-
-				infPoints.push_back(infPoint);
-				infPoint.clear();
-				int iSize = infPoints.size();
-
-				if (iSize > 1) {// make sure there is more than one point
-
-					int t0 = (int) std::round(infPoints[iSize - 1][1]);
-					int t1 = (int) std::round(infPoints[iSize - 2][1]);
-
-
-					if ( t0 == t1 ){
-
-						infPoints.pop_back();
-
-
-					}
-
-				}
-			}
-			accelerationPrevious = accelerationCurrent;
-		}
-
+	// remove bad data from the bottom of the profile
+	int size = (int) depthsAndTemps.size();
+	while (size > 0 && (depthsAndTemps[size - 1][1] >= MAX_VALID_TEMPERATURE
+			|| depthsAndTemps[size - 1][1] < MIN_VALID_TEMPERATURE)) {
+		size--;
 	}
 
+	std::vector<double> depths(size);
+	std::vector<double> rawTemps(size);
+	for (int i = 0; i < size; i++) {
+		depths[i] = depthsAndTemps[i][0];
+		rawTemps[i] = depthsAndTemps[i][1];
+	}
+
+	// median filter, the window gets smaller near the ends of the profile
+	std::vector<double> temps(size);
+	for (int i = 0; i < size; i++) {
+		int halfWindow = std::min(MEDIAN_HALF_WINDOW, std::min(i, size - 1 - i));
+		temps[i] = median(rawTemps, i - halfWindow, i + halfWindow);
+	}
+
+	// remove large steps from the bottom of the profile
+	while (size > 1 && std::fabs(temps[size - 1] - temps[size - 2]) > TAIL_MAX_STEP) {
+		size--;
+	}
+
+	if (size < 2) {
+		return infPoints;
+	}
+
+	// selected[i] is true when point i is an inflection point
+	std::vector<bool> selected(size, false);
+	selected[0] = true;
+	selected[size - 1] = true;
+	int selectedCount = 2;
+
+	while (selectedCount < MAXINFPTS) {
+
+		double maxDeviation = 0;
+		int maxPoint = -1;
+		int first = 0;
+
+		// check the points between each pair of neighboring selected points
+		while (first < size - 1) {
+			int last = first + 1;
+			while (!selected[last]) {
+				last++;
+			}
+			for (int i = first + 1; i < last; i++) {
+				double d = deviation(depths, temps, first, last, i);
+				if (d > maxDeviation) {
+					maxDeviation = d;
+					maxPoint = i;
+				}
+			}
+			first = last;
+		}
+
+		if (maxPoint == -1 || maxDeviation <= INFLECTION_TOLERANCE) {
+			break;
+		}
+
+		selected[maxPoint] = true;
+		selectedCount++;
+	}
+
+	for (int i = 0; i < size; i++) {
+		if (selected[i]) {
+			infPoints.push_back({depths[i], temps[i]});
+		}
+	}
 
 	return infPoints;
 }

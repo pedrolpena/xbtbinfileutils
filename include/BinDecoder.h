@@ -26,6 +26,7 @@ public:
 	stdex::bitvector changeEndian(stdex::bitvector b);
 	std::string getBinarySequence(int,int);
 	int toInteger(int , int);
+	int getAvailablePoints(int, int, int);
 	std::string toString(int,int);
 	int getOldMessageType();
 	int getNewMessageType();

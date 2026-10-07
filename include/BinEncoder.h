@@ -6,7 +6,9 @@
  */
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <fstream>
+#include <vector>
 #include <array>
 #include "bitvector.h"
 #include "MessageType.h"
@@ -26,6 +28,8 @@ public:
 	int newMessageType;
 	stdex::bitvector changeEndian(stdex::bitvector);
 	void setBitWithinBits(stdex::bitvector &b0, stdex::bitvector &b1,int);
+	static constexpr int MISSING_VALUE = -999;
+	int scaleValue(double value, double scale, double offset = 0);
 	void integerToBits(stdex::bitvector &b0, int, std::array<int,2>);
 	void stringToBits(stdex::bitvector &b0, std::string,std::array<int,2>);
 	void encodeCommentBlocks(stdex::bitvector &b0,std::string,std::array<int,2>,int);

@@ -118,6 +118,7 @@ public:
      * @return The sound speed in meters per second.
      */
 	static double getSoundSpeedChenMillero(double pressure, double salinity, double temp);
+	static double getSoundSpeedChenMilleroUNESCO1983(double pressure, double salinity, double temp);
 
 
 	SoundSpeedInSeaWater();

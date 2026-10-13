@@ -11,20 +11,26 @@
 #include <cstdint>
 #include <vector>
 #include <algorithm>
+#include <array>
+#include <sstream>
 
 
 #include "Agency.h"
 #include "DataQuality.h"
 #include "DataResolution.h"
 #include "DepthCalculator.h"
+#include "EDFFormat.h"
 #include "Launchers.h"
+#include "MessageType.h"
 #include "PressureCalculator.h"
 #include "SoundSpeedInSeaWater.h"
 #include "SurfaceCurrentInstrument.h"
 #include "WindInstrument.h"
 #include "XBTProbe.h"
 #include "XBTProfile.h"
+#include "XBTProfileDataRanges.h"
 #include "XBTRecorder.h"
+#include "XBTResistanceToTemperatureConverter.h"
 
 
 #ifndef FORMATCONVERTER_H_
@@ -59,6 +65,8 @@ public:
      */
     std::string getASCIINDC();
     std::string getASCIIEDF(std::string fileName,double salinity);
+
+    std::string writeEDF(XBTProfile &profile, std::string fileName);
     std::string decimalDegreesLatToDMSAOML(double lat);
     std::string decimalDegreesLonToDMSAOML(double lon);
     std::string decimalDegreesLatToDMSEDF(double lat);

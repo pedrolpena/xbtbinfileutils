@@ -69,13 +69,21 @@ public:
     static constexpr int RIDER_EMAILS = 53;
     static constexpr int RIDER_INSTITUTIONS = 54;
     static constexpr int RIDER_PHONES = 55;
+    // Type 4 only, values from Sippican MK21 export data files (EDF).
+    static constexpr int LAUNCH_SECOND = 56;
+    static constexpr int SALINITY = 57;
+    static constexpr int NUMBER_OF_EDF_TEXT_BLOCKS = 58;
+    static constexpr int EDF_TEXT = 59;
+    static constexpr int NUMBER_OF_DATA_LOCATIONS = 60;
 
-
+    // Type 4 resistance points, ohms = (N - RESISTANCE_OFFSET) / RESISTANCE_SCALE
+    static constexpr double RESISTANCE_SCALE = 1000.0;
+    static constexpr int RESISTANCE_OFFSET = 1000000;
 
 	XBTProfileDataRanges();
 	virtual ~XBTProfileDataRanges();
 	static  std::array<int,2> getDataLocation(int,int);
 private:
-	static constexpr int _DATA_POSITION_IN_BIN[56][2][5]={};
+	static constexpr int _DATA_POSITION_IN_BIN[NUMBER_OF_DATA_LOCATIONS][2][5]={};
 };
 #endif /* INCLUDE_XBTPROFILEDATARANGES_H_ */

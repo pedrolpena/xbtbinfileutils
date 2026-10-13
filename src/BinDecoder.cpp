@@ -149,6 +149,67 @@ int BinDecoder::getAvailablePoints(int start, int points, int bSize) {
     return std::min(points, available);
 }
 
+/**
+ * This method computes and returns a 64 bit integer from a sequence of bits.
+ * It is used for fields wider than 32 bits.
+ *
+ * @param start the position from which to start extracting a binary
+ * sequence.
+ * @param end the position from which to end extracting a binary sequence.
+ * @return the integer or -999 when the range is not in the file
+ */
+long long BinDecoder::toLong(int start, int end) {
+    if (start < 0 || end < 0 || end - start <= 0 || end >= (int)bits.size()) {
+        return -999;
+    }
+    long long value = 0;
+    for (int i = start; i <= end; i++) {
+        value = (value << 1) | (bits.test(i) ? 1 : 0);
+    }
+    return value;
+}
+
+/**
+ * This method returns the value of a field or -999 when the field does not
+ * exist in this message type, is not in the file or has every bit set,
+ * which is how Amverseas marks a missing value.
+ *
+ * @param field the data location of the field
+ * @return the value of the field or -999
+ */
+int BinDecoder::getField(int field) {
+    int mt = getNewMessageType();
+    std::array<int,2> range = XBTProfileDataRanges::getDataLocation(field, mt);
+    long long value = toLong(range[0], range[1]);
+    if (value == -999 || value == (1LL << (range[1] - range[0] + 1)) - 1) {
+        return -999;
+    }
+    return (int)value;
+}
+
+/**
+ * This method returns the text stored in a sequence of bits. Unlike
+ * toString it keeps line breaks and characters outside of ASCII, only the
+ * zeros that fill the last block are removed.
+ *
+ * @param start the bit position of the first character
+ * @param end the bit position after the last character
+ * @return the text
+ */
+std::string BinDecoder::toText(int start, int end) {
+    std::string str = "";
+    for (int i = start; i + 8 <= end && i + 8 <= (int)bits.size(); i += 8) {
+        char x = 0;
+        for (int j = 0; j < 8; j++) {
+            x = (x << 1) | (bits.test(i + j) ? 1 : 0);
+        }
+        if (x != 0) {
+            str += x;
+        }
+    }
+    return str;
+}
+
 int BinDecoder::getOldMessageType() {
     int start = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::OLD_MESSAGE_TYPE,1)[0];
     int end = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::OLD_MESSAGE_TYPE,1)[1];
@@ -597,7 +658,7 @@ std::vector<double> BinDecoder::getResistance() {
     std::vector<double> temps(points,0);
     int counter = 0;
     for (int i = start; i < start + points * bSize; i += bSize) {
-        temps[counter] = (toInteger(i, i + bSize - 1) / 100 + 0);
+        temps[counter] = (toInteger(i, i + bSize - 1) - XBTProfileDataRanges::RESISTANCE_OFFSET) / XBTProfileDataRanges::RESISTANCE_SCALE;
         counter++;
 
     }//end for
@@ -640,7 +701,7 @@ std::vector<double> BinDecoder::getResistancePoints() {
     std::vector<double> resistance(points,0);
     int counter = 0;
     for (int i = start; i < start + points * bSize; i += bSize) {
-        resistance[counter] = (((double)toInteger(i, i + bSize - 1) - 0.00 ) / 100.00);
+        resistance[counter] = (((double)toInteger(i, i + bSize - 1) - XBTProfileDataRanges::RESISTANCE_OFFSET ) / XBTProfileDataRanges::RESISTANCE_SCALE);
         counter++;
 
     }//end for
@@ -735,7 +796,7 @@ double BinDecoder::getSeaResistance() {
     int mt = getNewMessageType();
     int start = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_RESISTANCE,mt)[0];
     int end = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_RESISTANCE,mt)[1];
-    return (((double)toInteger(start, end) + 0.00 )/ 100.00);
+    return (((double)toInteger(start, end) - XBTProfileDataRanges::RESISTANCE_OFFSET )/ XBTProfileDataRanges::RESISTANCE_SCALE);
 }
 /**
  * <strong>(FXY22004)</strong>-This method returns the sea surface current
@@ -1121,6 +1182,50 @@ int BinDecoder::getYear() {
     return toInteger(start, end);
 }
 
+/**
+ * This method returns the second when the measurement was made. Only type
+ * 4 messages hold this value.
+ *
+ * @return the second or -999 when there is no value
+ */
+int BinDecoder::getSecond() {
+    return getField(XBTProfileDataRanges::LAUNCH_SECOND);
+}
+
+/**
+ * This method returns the salinity in parts per thousand used to compute
+ * the sound velocity. Only type 4 messages hold this value.
+ *
+ * @return the salinity or -999 when there is no value
+ */
+double BinDecoder::getSalinity() {
+    int value = getField(XBTProfileDataRanges::SALINITY);
+    return value == -999 ? -999 : value / 100.0;
+}
+
+/**
+ * This method returns the lines of the EDF header that the other fields can
+ * not hold. They are stored in 40 bit blocks after the rider phone number.
+ * Only type 4 messages hold this value.
+ *
+ * @return the lines, every line is the section name, a tab and the line as
+ * it was in the EDF file
+ */
+std::string BinDecoder::getEDFText() {
+    int mt = getNewMessageType();
+    int start = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::EDF_TEXT,mt)[0];
+    if (start == -1) {
+        return "";
+    }
+    int bSize = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_TEMPERATURE,mt)[1]
+            - XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_TEMPERATURE,mt)[0] + 1;
+    int riderBlocks = std::max(getNumberOfRiderBlocks(), 0) + std::max(getNumberOfRiderEmailBlocks(), 0)
+            + std::max(getNumberOfRiderInstitutionBlocks(), 0) + std::max(getNumberOfRiderPhoneBlocks(), 0);
+    start += bSize * std::max(getTimesReplicated(), 0) + 40 * riderBlocks;
+    int blocks = std::max(getField(XBTProfileDataRanges::NUMBER_OF_EDF_TEXT_BLOCKS), 0);
+    return toText(start, start + 40 * blocks);
+}
+
 void BinDecoder::decodeXBTProfile(XBTProfile &xBTProfile) {
     int messageType = getNewMessageType();
     //XBTProfile *xBTProfile = new XBTProfile();
@@ -1191,6 +1296,12 @@ void BinDecoder::decodeXBTProfile(XBTProfile &xBTProfile) {
     xBTProfile.setXBTRecorderManufacturedYear(getXBTRecorderManufacturedYear());
     xBTProfile.setXBTRecorderSerialNumber(getXBTRecorderSerialNumber());
     xBTProfile.setYear(getYear());
+
+    if (messageType == MessageType::MESSAGE_TYPE_4) {
+        xBTProfile.setSecond(getSecond());
+        xBTProfile.setSalinity(getSalinity());
+        xBTProfile.setEDFText(getEDFText());
+    }//end if
 
     //return *xBTProfile;
 }

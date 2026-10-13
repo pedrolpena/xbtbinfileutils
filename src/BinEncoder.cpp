@@ -88,6 +88,22 @@ int BinEncoder::scaleValue(double value, double scale, double offset) {
  * where to insert the extracted bits.
  */
 void BinEncoder::integerToBits(stdex::bitvector &b, int intValue, std::array<int,2> range) {
+    // Amverseas encodes a missing value by setting every bit in the field.
+    if (intValue == MISSING_VALUE) {
+        intValue = -1;
+    }
+    longToBits(b, intValue, range);
+}
+/**
+ * This method extracts the bits from the 64 bit integer passed and stores
+ * it in a BitSet object. It is used for fields wider than 32 bits.
+ *
+ * @param b BitSet Object
+ * @param longValue the value to store, MISSING_VALUE sets every bit
+ * @param range an int[] that holds the start position and end position
+ * where to insert the extracted bits.
+ */
+void BinEncoder::longToBits(stdex::bitvector &b, long long longValue, std::array<int,2> range) {
     if (range[0] == -1) {
         return;
     }
@@ -96,17 +112,16 @@ void BinEncoder::integerToBits(stdex::bitvector &b, int intValue, std::array<int
     startPos = range[0];
     endPos = range[1];
     int bitLength = endPos - startPos + 1;
-    // Amverseas encodes a missing value by setting every bit in the field.
-    if (intValue == MISSING_VALUE) {
-        intValue = -1;
+    if (longValue == MISSING_VALUE) {
+        longValue = -1;
     }
     stdex::bitvector tempBS;
     tempBS = stdex::bitvector(bitLength);
     int bitZero;
 
     for (int i = 0; i < bitLength; i++) {
-        bitZero = intValue & 0x01;
-        intValue = intValue >> 1;
+        bitZero = longValue & 0x01;
+        longValue = longValue >> 1;
         if (bitZero == 1) {
             tempBS.set((bitLength - 1) - i, true);
         } else {
@@ -235,6 +250,7 @@ void BinEncoder::encodeProfile(XBTProfile &xBTProfile) {
     integerToBits(bits, xBTProfile.getXBTProbeManufacturedYear(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::XBT_PROBE_MANUFACTURE_YEAR,newMessageType));
     integerToBits(bits, xBTProfile.getXBTProbeManufacturedMonth(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::XBT_PROBE_MANUFACTURE_MONTH,newMessageType));
     integerToBits(bits, xBTProfile.getXBTProbeManufacturedDay(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::XBT_PROBE_MANUFACTURE_DAY,newMessageType));
+    encodeEDFFields(xBTProfile);
     // Amverseas defaults the rider block counts to 0, the real counts are
     // written below when the rider strings are encoded.
     integerToBits(bits, 0, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::NUMBER_OF_RIDER_BLOCKS,newMessageType));
@@ -252,7 +268,8 @@ void BinEncoder::encodeProfile(XBTProfile &xBTProfile) {
 
     if (newMessageType == MessageType::MESSAGE_TYPE_4) {
 
-        offset = 0;
+        scaleFactor = std::log10(XBTProfileDataRanges::RESISTANCE_SCALE);
+        offset = XBTProfileDataRanges::RESISTANCE_OFFSET;
         start = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::RESISTANCE_POINTS,newMessageType)[0];
 
     }
@@ -361,6 +378,14 @@ void BinEncoder::encodeProfile(XBTProfile &xBTProfile) {
 
     }
     xBTProfile.setNumberOfRiderPhoneBlocks(numberOfRiderPhoneBlocks);
+
+    //**************************Encode EDF text************************
+    start0 = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::EDF_TEXT,newMessageType)[0];
+    if (start0 != -1) {
+        start0 += bitLen * timesReplicated + 40 * (numberOfRiderBlocks + numberOfRiderEmailBlocks
+                + numberOfRiderInstitutionBlocks + numberOfRiderPhoneBlocks);
+        encodeTextBlocks(bits, xBTProfile.getEDFText(), XBTProfileDataRanges::NUMBER_OF_EDF_TEXT_BLOCKS, start0);
+    }
     // calculate bits needed to make BitSet a multiple of 8
     unsigned int bitsNeeded =  std::abs(8 * (int)std::ceil(((double)getBitsSize())/(8.0)) - getBitsSize());
 
@@ -405,6 +430,47 @@ void BinEncoder::encodeProfile(XBTProfile &xBTProfile) {
 
 }
 
+/**
+ * This method stores the values of a Sippican MK21 export data file (EDF)
+ * that the other fields can not hold. These fields only exist in type 4
+ * messages, nothing is stored for the other message types.
+ *
+ * @param xBTProfile an XBTProfile object
+ */
+void BinEncoder::encodeEDFFields(XBTProfile &xBTProfile) {
+    if (newMessageType != MessageType::MESSAGE_TYPE_4) {
+        return;
+    }
+
+    integerToBits(bits, xBTProfile.getSecond(), XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::LAUNCH_SECOND,newMessageType));
+    int salinity = scaleValue(xBTProfile.getSalinity(), 100.0);
+    integerToBits(bits, salinity, XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SALINITY,newMessageType));
+}
+/**
+ * This method stores a string in 40 bit blocks and stores the number of
+ * blocks used. Strings longer than the block count field allows are
+ * truncated.
+ *
+ * @param b BitSet Object
+ * @param s the string to store
+ * @param countField the data location that holds the number of blocks
+ * @param start the bit position where the string starts
+ * @return the bit position after the last block
+ */
+int BinEncoder::encodeTextBlocks(stdex::bitvector &b, std::string s, int countField, int start) {
+    std::array<int,2> countRange = XBTProfileDataRanges::getDataLocation(countField, newMessageType);
+    int maxBlocks = (1 << (countRange[1] - countRange[0] + 1)) - 1;
+    int blocks = (int) std::ceil(((double) s.length()) / 5);
+    if (blocks > maxBlocks) {
+        blocks = maxBlocks;
+        s.resize(5 * blocks);
+    }
+    integerToBits(b, blocks, countRange);
+    if (blocks > 0) {
+        encodeCommentBlocks(b, s, std::array<int,2>{start, -1}, blocks);
+    }
+    return start + 40 * blocks;
+}
 /**
  * This method returns a string representation of the binary sequence in the
  * specified range in the bin file.
@@ -477,9 +543,31 @@ void BinEncoder::setMessageCRC(stdex::bitvector &b) {
  * file.
  */
 void BinEncoder::writeOutBinFile(std::string outputFile) {
-	setMessageCRC(bits);
 	std::ofstream fos;
 	fos.open(outputFile, std::ios::binary | std::ios::out);
+	writeOutBin(fos);
+	fos.close();
+}
+
+/**
+ * This method writes the binary profile to an output stream, e.g. standard
+ * out.
+ *
+ * @param out the stream to write to. It should be opened in binary mode.
+ */
+void BinEncoder::writeOutBin(std::ostream &out) {
+	std::vector<char> bytes = getBytes();
+	out.write(bytes.data(), bytes.size());
+}
+
+/**
+ * This method computes the CRC and returns the binary profile as bytes.
+ *
+ * @return the bytes of the binary profile
+ */
+std::vector<char> BinEncoder::getBytes() {
+	setMessageCRC(bits);
+	std::vector<char> bytes;
 	char temp = 0;
 
 	for (int i = 0; i < getBitsSize(); i++) {
@@ -488,11 +576,11 @@ void BinEncoder::writeOutBinFile(std::string outputFile) {
 		temp |= bits.test(i);
 
 		if ((i + 1) % 8 == 0) {
-			fos.write(&temp, 1);
+			bytes.push_back(temp);
 		}    //end if
 	}    //end for
 
-	fos.close();
+	return bytes;
 }
 
 

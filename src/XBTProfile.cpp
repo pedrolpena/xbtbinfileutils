@@ -641,3 +641,35 @@ std::string XBTProfile::intToHexString(int int1) {
 void XBTProfile::setCallsign(std::string wmoId) {
 	setWMOID(wmoId);
 }
+
+int XBTProfile::getSecond() {
+	return second;
+}
+
+void XBTProfile::setSecond(int second) {
+	this->second = second;
+}
+
+double XBTProfile::getSalinity() {
+	return salinity;
+}
+
+void XBTProfile::setSalinity(double salinity) {
+	this->salinity = salinity;
+}
+
+/**
+ * This method returns the lines of the EDF header that can not be made
+ * from the other values of the profile, e.g. the raw data filename, the
+ * units and the memo. Every line is stored as the section name, a tab and
+ * the line as it was in the EDF file.
+ *
+ * @return the lines separated by line feeds
+ */
+std::string XBTProfile::getEDFText() {
+	return edfText;
+}
+
+void XBTProfile::setEDFText(std::string edfText) {
+	this->edfText = edfText;
+}

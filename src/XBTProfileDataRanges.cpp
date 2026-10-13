@@ -9,7 +9,7 @@
 
 #include "MessageType.h"
 
-constexpr int dataLocations[56][2][5] = {
+constexpr int dataLocations[XBTProfileDataRanges::NUMBER_OF_DATA_LOCATIONS][2][5] = {
     //                  start                         end
     //                    0                            1
     //          0    1    2    3    4        0    1    2    3    4    // message types
@@ -59,16 +59,23 @@ constexpr int dataLocations[56][2][5] = {
     /*43*/ {{  -1,  -1,  -1, 849, 849 }, {  -1,  -1, -1,  854, 854 }},// number of rider institution blocks
     /*44*/ {{  -1,  -1,  -1, 855, 855 }, {  -1,  -1, -1,  860, 860 }},// number of rider email blocks
     /*45*/ {{  -1,  -1,  -1, 861, 861 }, {  -1,  -1, -1,  866, 866 }},// number of rider phone blocks
-    /*46*/ {{  -1, 597, 707, 867, 867 }, {  -1, 604, 714, 874, 874 }},// number of repeated fields
-    /*47*/ {{  -1, 605, 715, 875, 875 }, {  -1, 620, 730, 890, 890 }},// times replicated
-    /*48*/ {{  -1, 621, 731, 891, 891 }, {  -1, 632, 742, 902, 911 }},// sea surface temperature/resistance
+    /*46*/ {{  -1, 597, 707, 867, 896 }, {  -1, 604, 714, 874, 903 }},// number of repeated fields
+    /*47*/ {{  -1, 605, 715, 875, 904 }, {  -1, 620, 730, 890, 919 }},// times replicated
+    /*48*/ {{  -1, 621, 731, 891, 920 }, {  -1, 632, 742, 902, 946 }},// sea surface temperature/resistance
     /*49*/ {{  -1, 633,  -1,  -1,  -1 }, {  -1, 646,  -1,  -1,  -1 }},// sea depth
-    /*50*/ {{  -1, 621, 731, 891, 891 }, {  -1,  -1,  -1,  -1,  -1 }},// temperature points
+    /*50*/ {{  -1, 621, 731, 891, 920 }, {  -1,  -1,  -1,  -1,  -1 }},// temperature points
     /*51*/ {{  -1,  -1,  -1,  -1,  -1 }, {  -1,  -1,  -1,  -1,  -1 }},// comment blocks
-    /*52*/ {{  -1,  -1,  -1, 891, 891 }, {  -1,  -1,  -1,  -1,  -1 }},// rider names
-    /*53*/ {{  -1,  -1,  -1, 891, 891 }, {  -1,  -1,  -1,  -1,  -1 }},// rider emails
-    /*54*/ {{  -1,  -1,  -1, 891, 891 }, {  -1,  -1,  -1,  -1,  -1 }},// rider institutions
-    /*55*/ {{  -1,  -1,  -1, 891, 891 }, {  -1,  -1,  -1,  -1, - 1 }},// rider phones
+    /*52*/ {{  -1,  -1,  -1, 891, 920 }, {  -1,  -1,  -1,  -1,  -1 }},// rider names
+    /*53*/ {{  -1,  -1,  -1, 891, 920 }, {  -1,  -1,  -1,  -1,  -1 }},// rider emails
+    /*54*/ {{  -1,  -1,  -1, 891, 920 }, {  -1,  -1,  -1,  -1,  -1 }},// rider institutions
+    /*55*/ {{  -1,  -1,  -1, 891, 920 }, {  -1,  -1,  -1,  -1,  -1 }},// rider phones
+    // The fields below are only stored in type 4 messages. They hold the
+    // values of Sippican MK21 export data files (EDF) that the fields above
+    // can not hold.
+    /*56*/ {{  -1,  -1,  -1,  -1, 867 }, {  -1,  -1,  -1,  -1, 872 }},// launch second
+    /*57*/ {{  -1,  -1,  -1,  -1, 873 }, {  -1,  -1,  -1,  -1, 885 }},// salinity
+    /*58*/ {{  -1,  -1,  -1,  -1, 886 }, {  -1,  -1,  -1,  -1, 895 }},// number of EDF text blocks
+    /*59*/ {{  -1,  -1,  -1,  -1, 920 }, {  -1,  -1,  -1,  -1,  -1 }},// EDF text
 };
 
 constexpr int WMOID = 0;

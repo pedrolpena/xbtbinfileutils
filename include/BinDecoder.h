@@ -14,6 +14,7 @@
 
 #include "bitvector.h"
 #include "XBTProfile.h"
+#include "EDFFormat.h"
 
 
 class BinDecoder {
@@ -27,6 +28,9 @@ public:
 	std::string getBinarySequence(int,int);
 	int toInteger(int , int);
 	int getAvailablePoints(int, int, int);
+	long long toLong(int, int);
+	int getField(int);
+	std::string toText(int, int);
 	std::string toString(int,int);
 	int getOldMessageType();
 	int getNewMessageType();
@@ -88,6 +92,9 @@ public:
 	int getXBTRecorderManufacturedYear();
 	std::string getXBTRecorderSerialNumber();
 	int getYear();
+	int getSecond();
+	double getSalinity();
+	std::string getEDFText();
 	void decodeXBTProfile(XBTProfile &xBTProfile);
 	int getBitsSize();
 

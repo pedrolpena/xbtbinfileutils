@@ -137,6 +137,14 @@ public:
 	void setCallsign(std::string);
 	std::string toString();
 
+	// Type 4 only, values from Sippican MK21 export data files (EDF)
+	int getSecond();
+	void setSecond(int);
+	double getSalinity();
+	void setSalinity(double);
+	std::string getEDFText();
+	void setEDFText(std::string);
+
 private:
 	std::string wmoId = "";
 	int oldMessageType = -999;
@@ -197,6 +205,9 @@ private:
 	std::string riderEmail = "";
 	std::string riderInstitution = "";
 	std::string riderPhone = "";
+	int second = -999;
+	double salinity = -999;
+	std::string edfText = "";
 	std::string intToHexString(int);
 };
 

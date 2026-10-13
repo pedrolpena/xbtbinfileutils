@@ -8,9 +8,11 @@
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <ostream>
 #include <vector>
 #include <array>
 #include "bitvector.h"
+#include "EDFFormat.h"
 #include "MessageType.h"
 #include "XBTProfile.h"
 #include "XBTProfileDataRanges.h"
@@ -31,13 +33,18 @@ public:
 	static constexpr int MISSING_VALUE = -999;
 	int scaleValue(double value, double scale, double offset = 0);
 	void integerToBits(stdex::bitvector &b0, int, std::array<int,2>);
+	void longToBits(stdex::bitvector &b0, long long, std::array<int,2>);
 	void stringToBits(stdex::bitvector &b0, std::string,std::array<int,2>);
 	void encodeCommentBlocks(stdex::bitvector &b0,std::string,std::array<int,2>,int);
 	void encodeProfile(XBTProfile &xBTProfile);
+	void encodeEDFFields(XBTProfile &xBTProfile);
+	int encodeTextBlocks(stdex::bitvector &b0, std::string, int, int);
 	int getBitsSize(void);
 	std::string getBinarySequence(int, int);
 	void setMessageCRC(stdex::bitvector &b);
 	void writeOutBinFile(std::string outputFile);
+	void writeOutBin(std::ostream &out);
+	std::vector<char> getBytes();
 	uint32_t computeCRC32(char *buf, uint32_t len);
 };
 

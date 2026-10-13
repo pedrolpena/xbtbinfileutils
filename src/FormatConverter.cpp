@@ -194,86 +194,312 @@ std::string FormatConverter::getASCII() {
  */
 std::string FormatConverter::getASCIIEDF(std::string fileName, double salinity) {
 
-	std::vector<std::vector<double>> depthsAndTemps;               //array of doubles that holds depths & temperature measurements
-    DepthCalculator *dc = new DepthCalculator(*xBTprofile);
-    depthsAndTemps = dc->getDepthsAndTemperaturePoints();
-    //char buf[120];
+    // Type 4 profiles made from an EDF file hold the header lines of that
+    // file and the salinity.
+    if (xBTprofile->getNewMessageType() == MessageType::MESSAGE_TYPE_4 && !xBTprofile->getEDFText().empty()) {
+        XBTProfile p = *xBTprofile;
+        if (p.getSalinity() == -999) {
+            p.setSalinity(salinity);
+        }
+        return writeEDF(p, fileName);
+    }
+
+    // Other profiles get the values a MK21 would have used.
+    XBTProfile p = *xBTprofile;
+    p.setSalinity(salinity);
+    std::string text = "";
+    text += "System Information\tUnits            :  Metric\n";
+    text += "Memo\t" + p.getShipName() + "\n";
+    text += "Post-Processing\tOperations       :  None\n";
+    p.setEDFText(text);
+
+    return writeEDF(p, fileName);
+}
+
+namespace {
+
+/**
+ * Formats a position the way the MK21 does, degrees followed by minutes
+ * with 5 decimals and the hemisphere, e.g. 44 50.67871N.
+ */
+std::string formatPosition(double degrees, char positive, char negative) {
+    long long total = std::llround(std::fabs(degrees) * 60.0 * 100000.0);
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%lld %lld.%05lld%c", total / 6000000, (total % 6000000) / 100000,
+            total % 100000, degrees < 0 ? negative : positive);
+    return std::string(buf);
+}
+
+/**
+ * Returns the stored EDF lines of a section, every line ends with CR LF.
+ * Every stored line is the section name, a tab and the line.
+ */
+std::string getLines(const std::string &edfText, const std::string &section) {
+    std::string lines = "";
+    std::stringstream ss(edfText);
+    std::string line;
+    while (std::getline(ss, line)) {
+        size_t tab = line.find('\t');
+        if (tab != std::string::npos && line.compare(0, tab, section) == 0) {
+            lines += line.substr(tab + 1) + "\r\n";
+        }
+    }
+    return lines;
+}
+
+/**
+ * Returns true when a section of the stored EDF lines has a line that
+ * starts with the given key.
+ */
+bool hasLine(const std::string &edfText, const std::string &section, const std::string &key) {
+    std::stringstream ss(edfText);
+    std::string line;
+    while (std::getline(ss, line)) {
+        if (line.compare(0, section.size() + 1, section + "\t") == 0
+                && line.compare(section.size() + 1, key.size(), key) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Returns the key of an EDF line, the text in front of the colon without
+ * the spaces that line up the values.
+ */
+std::string getKey(const std::string &line) {
+    std::string key = line.substr(0, line.find(':'));
+    while (!key.empty() && key.back() == ' ') {
+        key.pop_back();
+    }
+    return key;
+}
+
+/**
+ * Returns the number of stored lines of a section.
+ */
+int countLines(const std::string &edfText, const std::string &section) {
+    int count = 0;
+    std::stringstream ss(edfText);
+    std::string line;
+    while (std::getline(ss, line)) {
+        if (line.compare(0, section.size() + 1, section + "\t") == 0) {
+            count++;
+        }
+    }
+    return count;
+}
+
+/**
+ * Returns true when a value is missing, either -999 or every bit of the
+ * field set, which is how Amverseas marks a missing value.
+ */
+bool isMissing(int value, int field, int messageType) {
+    if (value == -999) {
+        return true;
+    }
+    std::array<int,2> range = XBTProfileDataRanges::getDataLocation(field, messageType);
+    if (range[0] < 0 || range[1] < range[0] || range[1] - range[0] >= 31) {
+        return false;
+    }
+    return value == (1 << (range[1] - range[0] + 1)) - 1;
+}
+
+} // namespace
+
+/**
+ * This method writes a profile as an AOML export data file (EDF), which
+ * has the layout of the files written by the MK21 software. The lines that
+ * can be made from the fields of the profile are made from them, e.g. the
+ * date, the position and the probe information. The other lines come from
+ * the EDF text of the profile. A stored probe or serial number line
+ * replaces the line made from the fields. Depth, temperature and sound
+ * velocity are computed from the resistance points or, when there are
+ * none, from the temperature points.
+ *
+ * @param profile the profile to write
+ * @param fileName the binary file the profile came from, written as the raw
+ * data filename
+ * @return the EDF file
+ */
+std::string FormatConverter::writeEDF(XBTProfile &profile, std::string fileName) {
+    XBTProfile *p = &profile;
     std::string tmp = "";
-    fileName = fileName.substr(fileName.find_last_of("/\\") + 1); // extract filename from path
+    std::string text = p->getEDFText();
+    char b[256];
 
-    tmp += "// Amverseas EXPORT DATA FILE  (EDF)\r\n";
+    double frequency = XBTRecorder::getRecorderFrequency(p->getRecorderType());
+    double salinity = p->getSalinity() == -999 ? 35.0 : p->getSalinity();
+    std::vector<double> resistances = p->getResistancePoints();
+    std::vector<int> fields = EDFFormat::getDataFields(!resistances.empty());
+
+    // The probe lines come from the probe table, a stored line replaces the
+    // line with the same key, e.g. a terminal depth set for the launch.
+    std::vector<std::string> stored;
+    std::stringstream probeStored(getLines(text, "Probe Information"));
+    std::string storedLine;
+    while (std::getline(probeStored, storedLine)) {
+        stored.push_back(storedLine.substr(0, storedLine.find('\r')));
+    }
+    std::vector<std::string> keys;
+    std::string probeLines = "";
+    for (const std::string &line : EDFFormat::getProbeLines(p->getInstrumentType())) {
+        std::string out = line;
+        for (const std::string &s : stored) {
+            if (getKey(s) == getKey(line)) {
+                out = s;
+            }
+        }
+        keys.push_back(getKey(line));
+        probeLines += out + "\r\n";
+    }
+    // the other stored lines of the section, e.g. the pressure point correction
+    for (const std::string &s : stored) {
+        if (std::find(keys.begin(), keys.end(), getKey(s)) == keys.end()) {
+            probeLines += s + "\r\n";
+        }
+    }
+    double coefficientA = XBTProbe::getCoefficientA(p->getInstrumentType());
+    double coefficientB = XBTProbe::getCoefficientB(p->getInstrumentType()) * .001;
+    // the depths use the coefficients of a stored probe block
+    std::stringstream probeText(getLines(text, "Probe Information"));
+    std::string probeLine;
+    while (std::getline(probeText, probeLine)) {
+        if (probeLine.compare(0, 14, "Depth Coeff. 2") == 0) {
+            coefficientA = std::atof(probeLine.substr(probeLine.find(':') + 1).c_str());
+        } else if (probeLine.compare(0, 14, "Depth Coeff. 3") == 0) {
+            coefficientB = std::atof(probeLine.substr(probeLine.find(':') + 1).c_str());
+        }
+    }
+
+    snprintf(b, sizeof(b), "%02d/%02d/%04d", p->getMonth(), p->getDay(), p->getYear());
+    std::string date = b;
+    snprintf(b, sizeof(b), "%02d:%02d:%02d", p->getHour(), p->getMinute(), p->getSecond() == -999 ? 0 : p->getSecond());
+    std::string time = b;
+    std::string latitude = formatPosition(p->getLatitude(), 'N', 'S');
+    std::string longitude = formatPosition(p->getLongitude(), 'E', 'W');
+    // missing values are left empty
+    std::string sequenceNumber = "";
+    if (!isMissing(p->getSequenceNumber(), XBTProfileDataRanges::SEQUENCE_NUM, p->getNewMessageType())) {
+        sequenceNumber = std::to_string(p->getSequenceNumber());
+    }
+    std::string serialNumber = "";
+    if (!isMissing(p->getProbeSerialNumber(), XBTProfileDataRanges::PROBE_SERIAL_NUMBER, p->getNewMessageType())) {
+        serialNumber = EDFFormat::getSerialNumber(p->getProbeSerialNumber());
+    }
+    snprintf(b, sizeof(b), "%.2f", salinity);
+    std::string salinityText = b;
+
+    // the six launch fields of the MK21 and the extra ones that were stored
+    int infoFields = 6 + countLines(text, "Launch Information")
+            - (hasLine(text, "Launch Information", "Serial Number") ? 1 : 0);
+    tmp += EDFFormat::getTitle() + "\r\n";
     tmp += "// File Information\r\n";
-    tmp += "Raw Data Filename:  " + fileName + "\r\n";
+    tmp += "Raw Data Filename:  " + fileName.substr(fileName.find_last_of("/\\") + 1) + "\r\n";
+    // binaries made by older versions of edf2bin also stored the filename
+    // of the EDF, the name of the binary replaces it
+    std::stringstream fileLines(getLines(text, "File Information"));
+    std::string fileLine;
+    while (std::getline(fileLines, fileLine)) {
+        if (fileLine.compare(0, 17, "Raw Data Filename") != 0) {
+            tmp += fileLine + "\n";
+        }
+    }
     tmp += "// System Information\r\n";
-    tmp += "Units            :  Metric\r\n";
+    tmp += getLines(text, "System Information");
     tmp += "// Probe Information\r\n";
-    tmp += "Probe Type       :  " + XBTProbe::getProbeDescription(xBTprofile->getInstrumentType()) + "\r\n";
-    sprintf(buf,"%04.1f",XBTProbe::getMaxDepth(xBTprofile->getInstrumentType()));
-    tmp += "Terminal Depth   :  " + std::string(buf) + " m\r\n";
-    tmp += "Depth Equation   :  Standard\r\n";
-    tmp += "Depth Coeff. 1   :  0.0\r\n";
-    sprintf(buf,"%f", XBTProbe::getCoefficientA(xBTprofile->getInstrumentType()));
-    tmp += "Depth Coeff. 2   :  " + std::string(buf) + "\r\n";
-    sprintf(buf,"%f", XBTProbe::getCoefficientB(xBTprofile->getInstrumentType()) * .001);
-    tmp += "Depth Coeff. 3   :  " + std::string(buf) + "\r\n";
-    tmp += "Depth Coeff. 4   :  0.0\r\n";
+    tmp += probeLines;
     tmp += "// Launch Information\r\n";
-    tmp += "Num Info Fields  :  6\r\n";
-    sprintf(buf,"%02d/%02d/%04d\r\n",
-            xBTprofile->getMonth(),
-            xBTprofile->getDay(),
-            xBTprofile->getYear() );
-    tmp += "Date of Launch   :  " + std::string(buf);
-    sprintf(buf,"%02d:%02d:%02d\r\n",
-            xBTprofile->getHour(),
-            xBTprofile->getMinute(), 0);
-    tmp += "Time of Launch   :  " + std::string(buf);
-    tmp += "Sequence Number  :  " + std::to_string(xBTprofile->getSequenceNumber()) + "\r\n";;
-    tmp += "Latitude         :  " + decimalDegreesLatToDMSEDF(xBTprofile->getLatitude()) + "\r\n";;
-    tmp += "Longitude        :  " + decimalDegreesLonToDMSEDF(xBTprofile->getLongitude()) + "\r\n";;
-    tmp += "Serial Number    :  " + xBTprofile->getXBTRecorderSerialNumber() + "\r\n";
+    tmp += "Num Info Fields  :  " + std::to_string(infoFields) + "\r\n";
+    tmp += "Date of Launch   :  " + date + "\r\n";
+    tmp += "Time of Launch   :  " + time + "\r\n";
+    tmp += "Sequence Number  :  " + sequenceNumber + "\r\n";
+    tmp += "Latitude         :  " + latitude + "\r\n";
+    tmp += "Longitude        :  " + longitude + "\r\n";
+    if (!hasLine(text, "Launch Information", "Serial Number")) {
+        tmp += "Serial Number    :  " + serialNumber + "\r\n";
+    }
+    tmp += getLines(text, "Launch Information");
     tmp += "// Memo\r\n";
-    tmp += xBTprofile->getShipName() + "\r\n";;
+    tmp += getLines(text, "Memo");
     tmp += "// Hardware\r\n";
-    tmp += "Recorder Device  : " + XBTRecorder::getRecorderDescription(xBTprofile->getRecorderType()) + "\r\n";
+    if (!hasLine(text, "Hardware", "MK21 Device")) {
+        tmp += "MK21 Device      :  " + XBTRecorder::getRecorderDescription(p->getRecorderType()) + "\r\n";
+    }
+    tmp += getLines(text, "Hardware");
     tmp += "// Information - XBT\r\n";
-    sprintf(buf,"%5.2f", salinity);
-    tmp += "Salinity          :  " + std::string(buf) + " ppt\r\n";
+    tmp += "Salinity          :  " + salinityText + " ppt\r\n";
+    tmp += getLines(text, "Information - XBT");
     tmp += "// Post-Processing\r\n";
-    tmp += "Operations       :  None\r\n";
+    tmp += getLines(text, "Post-Processing");
     tmp += "// Data Fields\r\n";
-    tmp += "Num Data Fields   :  5\r\n";
-    tmp += "Field1            :  Time (sec)\r\n";
-    tmp += "Field2            :  Resistance (ohms)\r\n";
-    tmp += "Field3            :  Depth (m)\r\n";
-    tmp += "Field4            :  Temperature (C)\r\n";
-    tmp += "Field5            :  Sound Velocity (m/s)\r\n";
+    tmp += "Num Data Fields   :  " + std::to_string(fields.size()) + "\r\n";
+    for (unsigned int i = 0; i < fields.size(); i++) {
+        tmp += "Field" + std::to_string(i + 1) + "            :  " + EDFFormat::getFieldLabel(fields[i]) + "\r\n";
+    }
     tmp += "// Data\r\n";
-    PressureCalculator pc;
+
+    XBTResistanceToTemperatureConverter converter;
     SoundSpeedInSeaWater ss;
-    double pressure;
-    double sv ;
-    double temp;
-    double depth;
-    double time = 0.0;
-    std::vector<double> resistances = xBTprofile->getResistancePoints();
-    double resistance;
-    for (unsigned int i = 0; i < depthsAndTemps.size() ; i++) {
-        depth = dc->getMeasurementDepth(i-1);
-        temp = depthsAndTemps[i][1];
-        pressure = pc.getPressure(depth, xBTprofile->getLatitude());
-        time = i / XBTRecorder::getRecorderFrequency(xBTprofile->getInstrumentType());
-        resistance = -9999.99;
-        if (!resistances.empty() && resistances.size() > i )
-        resistance =resistances[i] ;
-        sv = ss.getSoundSpeedChenMillero(pressure, salinity, temp);
-        sprintf(buf,"%5.1f %8.3f    %7.2f   %5.2f   %7.2f",time,resistance, depth, temp , sv);
-        tmp += std::string(buf)+"\r\n";
-    } //end for
-    delete dc;
+    std::vector<double> temperatures;
+    if (resistances.empty()) {
+        temperatures = p->getTemperaturePoints();
+    }
+    size_t points = resistances.empty() ? temperatures.size() : resistances.size();
+    const char *depthFormat = "%.2f";
+
+    // The MK21 computes the depth with single precision floats, using them
+    // gives the same rounding as the EDF files.
+    const float c2 = (float) coefficientA;
+    const float c3 = (float) coefficientB;
+
+    for (unsigned int i = 0; i < points; i++) {
+        double t = i / frequency;
+        float ft = (float) t;
+        float fdepth = ft * (c2 + ft * c3);
+        double depth = fdepth;
+        double resistance = -999;
+        double temperature;
+        if (resistances.empty()) {
+            temperature = temperatures[i];
+        } else {
+            resistance = resistances[i];
+            temperature = EDFFormat::MAX_TEMPERATURE;
+            if (resistance > 0) {
+                temperature = converter.convertResistaceToTemperature(resistance);
+            }
+            temperature = std::min(std::max(temperature, EDFFormat::MIN_TEMPERATURE), EDFFormat::MAX_TEMPERATURE);
+        }
+        // pressure in kPa, the MK21 uses 1 bar for every 10 meters
+        double soundVelocity = ss.getSoundSpeedChenMilleroUNESCO1983(depth * 10.0, salinity, temperature);
+
+        std::string line = "";
+        for (unsigned int j = 0; j < fields.size(); j++) {
+            switch (fields[j]) {
+                case EDFFormat::FIELD_TIME:
+                    snprintf(b, sizeof(b), "%.1f", t);
+                    break;
+                case EDFFormat::FIELD_RESISTANCE:
+                    snprintf(b, sizeof(b), "%.3f", resistance);
+                    break;
+                case EDFFormat::FIELD_DEPTH:
+                    snprintf(b, sizeof(b), depthFormat, depth);
+                    break;
+                case EDFFormat::FIELD_TEMPERATURE:
+                    snprintf(b, sizeof(b), "%.2f", temperature);
+                    break;
+                case EDFFormat::FIELD_SOUND_VELOCITY:
+                    snprintf(b, sizeof(b), "%.2f", soundVelocity);
+                    break;
+                default:
+                    b[0] = '\0';
+            }
+            line += (j > 0 ? "\t" : "") + std::string(b);
+        }
+        tmp += line + "\r\n";
+    }
+
     return tmp;
-
-
 }
 
 std::string FormatConverter::getASCIINDC() {

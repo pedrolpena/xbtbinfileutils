@@ -24,6 +24,8 @@ constexpr int EDFFormat::FIELD_TEMPERATURE;
 constexpr int EDFFormat::FIELD_SOUND_VELOCITY;
 constexpr double EDFFormat::MIN_TEMPERATURE;
 constexpr double EDFFormat::MAX_TEMPERATURE;
+constexpr double EDFFormat::MIN_RESISTANCE;
+constexpr double EDFFormat::MAX_RESISTANCE;
 
 EDFFormat::EDFFormat() {
 

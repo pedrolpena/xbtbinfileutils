@@ -265,12 +265,23 @@ void BinEncoder::encodeProfile(XBTProfile &xBTProfile) {
     double scaleFactor = 2;
     int offset = 400;
     start = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::TEMPERATURE_POINTS,newMessageType)[0];
+    // the highest value a type 4 temperature point can have, the values
+    // above it are resistances
+    int maxPoint = -1;
 
     if (newMessageType == MessageType::MESSAGE_TYPE_4) {
 
         scaleFactor = std::log10(XBTProfileDataRanges::RESISTANCE_SCALE);
         offset = XBTProfileDataRanges::RESISTANCE_OFFSET;
         start = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::RESISTANCE_POINTS,newMessageType)[0];
+
+        // a profile without resistances stores its temperatures, they are
+        // not converted to resistances
+        if (!xBTProfile.hasResistancePoints()) {
+            scaleFactor = std::log10(XBTProfileDataRanges::TEMPERATURE_SCALE);
+            offset = XBTProfileDataRanges::TEMPERATURE_OFFSET;
+            maxPoint = XBTProfileDataRanges::RESISTANCE_OFFSET - 1;
+        }
 
     }
 
@@ -286,6 +297,9 @@ void BinEncoder::encodeProfile(XBTProfile &xBTProfile) {
         // truncated to the wrong value
 
         double mp = std::round(xBTProfile.getMeasurementPoints()[i] * std::pow(10.0, scaleFactor)) + offset;
+        if (maxPoint != -1) {
+            mp = std::min(std::max(mp, 0.0), (double)maxPoint);
+        }
         measurementPointsRange[0] = start + i * bitLen;
         measurementPointsRange[1] = start + i * bitLen + bitLen - 1;
         integerToBits(bits, (int)mp , measurementPointsRange);

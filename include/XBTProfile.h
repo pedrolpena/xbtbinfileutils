@@ -68,6 +68,7 @@ public:
 	void setRecorderType(int);
 	std::vector<double> getResistancePoints();
 	void setResistancePoints(std::vector<double>);
+	bool hasResistancePoints();
 	std::string getRiderEmails();
 	void setRiderEmails(std::string);
 	std::string getRiderInstitutions();

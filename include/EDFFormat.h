@@ -34,6 +34,11 @@ public:
 	// The MK21 limits temperatures to this range
 	static constexpr double MIN_TEMPERATURE = -2.53;
 	static constexpr double MAX_TEMPERATURE = 37.07;
+	// It does so by limiting the resistances to this range before computing
+	// the temperature, 37.0696 and -2.5324 degrees. The sound velocity uses
+	// those temperatures, not the rounded limits above.
+	static constexpr double MIN_RESISTANCE = 3000.0;
+	static constexpr double MAX_RESISTANCE = 18600.0;
 
 	EDFFormat();
 	virtual ~EDFFormat();

@@ -464,11 +464,9 @@ std::string FormatConverter::writeEDF(XBTProfile &profile, std::string fileName)
             temperature = temperatures[i];
         } else {
             resistance = resistances[i];
-            temperature = EDFFormat::MAX_TEMPERATURE;
-            if (resistance > 0) {
-                temperature = converter.convertResistaceToTemperature(resistance);
-            }
-            temperature = std::min(std::max(temperature, EDFFormat::MIN_TEMPERATURE), EDFFormat::MAX_TEMPERATURE);
+            // the MK21 limits the resistance, not the temperature
+            temperature = converter.convertResistaceToTemperature(
+                    std::min(std::max(resistance, EDFFormat::MIN_RESISTANCE), EDFFormat::MAX_RESISTANCE));
         }
         // pressure in kPa, the MK21 uses 1 bar for every 10 meters
         double soundVelocity = ss.getSoundSpeedChenMilleroUNESCO1983(depth * 10.0, salinity, temperature);

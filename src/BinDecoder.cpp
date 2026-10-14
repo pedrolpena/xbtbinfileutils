@@ -653,6 +653,9 @@ std::vector<double> BinDecoder::getResistance() {
     if (points < 0) {
         return  std::vector<double>(1,0);
     }
+    if (hasTemperaturePoints()) {
+        return std::vector<double>();
+    }
     points = getAvailablePoints(start, points, bSize);
 
     std::vector<double> temps(points,0);
@@ -695,6 +698,9 @@ std::vector<double> BinDecoder::getResistancePoints() {
             - XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_TEMPERATURE,mt)[0] + 1;
     if (points < 0) {
     	return  std::vector<double>(1,0);
+    }
+    if (hasTemperaturePoints()) {
+        return std::vector<double>();
     }
     points = getAvailablePoints(start, points, bSize);
 
@@ -793,6 +799,9 @@ double BinDecoder::getSeaDepth() {
  * there is no value.
  */
 double BinDecoder::getSeaResistance() {
+    if (hasTemperaturePoints()) {
+        return -999;
+    }
     int mt = getNewMessageType();
     int start = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_RESISTANCE,mt)[0];
     int end = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_RESISTANCE,mt)[1];
@@ -849,7 +858,29 @@ double BinDecoder::getSeaTemperature() {
     int mt = getNewMessageType();
     int start = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_TEMPERATURE,mt)[0];
     int end = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_TEMPERATURE,mt)[1];
+    if (hasTemperaturePoints()) {
+        return (toInteger(start, end) - XBTProfileDataRanges::TEMPERATURE_OFFSET) / XBTProfileDataRanges::TEMPERATURE_SCALE;
+    }
     return (toInteger(start, end) - 400.00) / 100.00 +.005;
+}
+
+/**
+ * This method tells whether a type 4 message stores temperature points
+ * instead of resistance points, which is the case for profiles made from
+ * files without resistances, e.g. EDF files that only hold temperatures.
+ * The first point of such a message is below RESISTANCE_OFFSET, a negative
+ * resistance that a thermistor can not have.
+ *
+ * @return true when the message is a type 4 message holding temperatures
+ */
+bool BinDecoder::hasTemperaturePoints() {
+    int mt = getNewMessageType();
+    if (mt != MessageType::MESSAGE_TYPE_4 || getTimesReplicated() <= 0) {
+        return false;
+    }
+    std::array<int,2> range = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_RESISTANCE, mt);
+    int first = toInteger(range[0], range[1]);
+    return first >= 0 && first < XBTProfileDataRanges::RESISTANCE_OFFSET;
 }
 /**
  * <strong>(FXY48201)</strong>-This method returns the version of Amverseas
@@ -937,6 +968,23 @@ std::vector<double> BinDecoder::getTemperaturePoints() {
 
     if (points < 0) {
     	return std::vector<double>(1,0);
+    }
+
+    // type 4 messages without resistances store the temperatures in the
+    // wider points of the resistances
+    if (mt == MessageType::MESSAGE_TYPE_4) {
+        if (!hasTemperaturePoints()) {
+            return std::vector<double>();
+        }
+        int bSize = XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_TEMPERATURE,mt)[1]
+                - XBTProfileDataRanges::getDataLocation(XBTProfileDataRanges::SEA_SURFACE_TEMPERATURE,mt)[0] + 1;
+        points = getAvailablePoints(start, points, bSize);
+        std::vector<double> temps(points,0);
+        for (int i = 0; i < points; i++) {
+            temps[i] = ((double)toInteger(start + i * bSize, start + i * bSize + bSize - 1)
+                    - XBTProfileDataRanges::TEMPERATURE_OFFSET) / XBTProfileDataRanges::TEMPERATURE_SCALE;
+        }
+        return temps;
     }
     points = getAvailablePoints(start, points, 12);
 
@@ -1258,7 +1306,7 @@ void BinDecoder::decodeXBTProfile(XBTProfile &xBTProfile) {
     xBTProfile.setSeaSurfaceCurrentDirection(getSeaSurfaceCurrentDirection());
     xBTProfile.setSeaSurfaceCurrentMeasurementMethod(getSeaSurfaceCurrentMeasurementMethod());
     xBTProfile.setSeaSurfaceCurrentSpeed(getSeaSurfaceCurrentSpeed());
-    if (messageType == MessageType::MESSAGE_TYPE_4) {
+    if (messageType == MessageType::MESSAGE_TYPE_4 && !hasTemperaturePoints()) {
         xBTProfile.setSeaSurfaceResistance(getSeaResistance());
     }//end if
     else {
@@ -1271,7 +1319,7 @@ void BinDecoder::decodeXBTProfile(XBTProfile &xBTProfile) {
     xBTProfile.setShipName(getShipName());
     xBTProfile.setShipSpeed(getShipSpeed());
     xBTProfile.setSoopLine(getSoopLine());
-    if (messageType == MessageType::MESSAGE_TYPE_4) {
+    if (messageType == MessageType::MESSAGE_TYPE_4 && !hasTemperaturePoints()) {
         xBTProfile.setResistancePoints(getResistancePoints());
     }//end if
     else {

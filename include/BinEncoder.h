@@ -4,6 +4,7 @@
  *  Created on: Jul 27, 2019
  *      Author: pedro
  */
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>

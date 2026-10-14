@@ -65,6 +65,7 @@ public:
 	int getSeaSurfaceCurrentMeasurementMethod();
 	double getSeaSurfaceCurrentSpeed();
 	double getSeaTemperature();
+	bool hasTemperaturePoints();
 	int getSeasVersion();
 	int getProbeSerialNumber();
 	int getSequenceNumber();

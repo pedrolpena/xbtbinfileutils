@@ -256,6 +256,17 @@ void XBTProfile::setResistancePoints( std::vector<double> resistancePoints ) {
     }//end if
 }
 
+/**
+ * This method tells whether the profile holds resistance points. Type 4
+ * profiles made from files that only hold temperatures, e.g. some EDF
+ * files, store the temperatures instead of resistances.
+ *
+ * @return true when there are resistance points
+ */
+bool XBTProfile::hasResistancePoints() {
+    return !resistancePoints.empty();
+}
+
  std::string XBTProfile::getRiderEmails()  {
 	return riderEmail;
 }
@@ -329,7 +340,7 @@ void XBTProfile::setSeaSurfaceCurrentSpeed( double seaSurfaceCurrentSpeed ) {
 double XBTProfile::getSeaSurfaceMeasurement()  {
 
     double ssm = this->seaSurfaceMeasurementPoint;
-    if (this->newMessageType == MessageType::MESSAGE_TYPE_4) {
+    if (this->newMessageType == MessageType::MESSAGE_TYPE_4 && hasResistancePoints()) {
         XBTResistanceToTemperatureConverter *XBTR2T = new XBTResistanceToTemperatureConverter();
         ssm = XBTR2T->convertResistaceToTemperature(seaSurfaceMeasurementPoint);
 
@@ -358,7 +369,7 @@ void XBTProfile::setSeaSurfaceResistance(double seaSurfaceResistance ) {
 double XBTProfile::getSeaSurfaceTemperature()  {
 
     double sst = seaSurfaceTemperature;
-    if (this->newMessageType == MessageType::MESSAGE_TYPE_4) {
+    if (this->newMessageType == MessageType::MESSAGE_TYPE_4 && hasResistancePoints()) {
         XBTResistanceToTemperatureConverter *XBTR2T = new XBTResistanceToTemperatureConverter();
         sst = XBTR2T->convertResistaceToTemperature(seaSurfaceResistance);
 
@@ -419,7 +430,8 @@ void XBTProfile::setShipSpeed(double shipSpeed ) {
  */
  std::vector<double> XBTProfile::getTemperaturePoints()  {
 	 std::vector<double> tp = temperaturePoints;
-     if (this->newMessageType == MessageType::MESSAGE_TYPE_4) {
+     // type 4 profiles without resistances hold the temperatures themselves
+     if (this->newMessageType == MessageType::MESSAGE_TYPE_4 && hasResistancePoints()) {
          XBTResistanceToTemperatureConverter *XBTR2T = new XBTResistanceToTemperatureConverter();
          tp = XBTR2T->convertResistaceToTemperature(resistancePoints);
 
@@ -621,8 +633,8 @@ std::string XBTProfile::toString() {
             + "Institution=" + getRiderInstitutions() + "\n"
             + "Salinity=" + std::to_string(getSalinity()) + "\n";
 
-    bool isType4 = getNewMessageType() == MessageType::MESSAGE_TYPE_4;
-    if (isType4)
+    bool hasResistances = getNewMessageType() == MessageType::MESSAGE_TYPE_4 && hasResistancePoints();
+    if (hasResistances)
         str += "Sea Resistance=" + std::to_string(getSeaSurfaceResistance()) + "\n";
 
     // one line per EDF header line, as the text can hold several
@@ -631,7 +643,7 @@ std::string XBTProfile::toString() {
     while (std::getline(edfLines, edfLine))
         str += "EDF text=" + edfLine + "\n";
 
-    if (isType4) {
+    if (hasResistances) {
         std::vector<double> resPoints = getResistancePoints();
         str += "index,temperature,resistance\n";
         for (unsigned int i = 0; i < tempPoints.size() && i < resPoints.size(); i++) {

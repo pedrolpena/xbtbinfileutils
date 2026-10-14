@@ -79,6 +79,15 @@ public:
     // Type 4 resistance points, ohms = (N - RESISTANCE_OFFSET) / RESISTANCE_SCALE
     static constexpr double RESISTANCE_SCALE = 1000.0;
     static constexpr int RESISTANCE_OFFSET = 1000000;
+    // Type 4 profiles made from files without resistances, e.g. EDF files
+    // that only hold temperatures, store the temperatures in the same
+    // points as celsius = (N - TEMPERATURE_OFFSET) / TEMPERATURE_SCALE.
+    // Every N below RESISTANCE_OFFSET would be a negative resistance, which
+    // a thermistor can not have, so a first point below RESISTANCE_OFFSET
+    // tells the decoder the points are temperatures. No resistances are
+    // made up for them.
+    static constexpr double TEMPERATURE_SCALE = 1000.0;
+    static constexpr int TEMPERATURE_OFFSET = 500000;
 
 	XBTProfileDataRanges();
 	virtual ~XBTProfileDataRanges();

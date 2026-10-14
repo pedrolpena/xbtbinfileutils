@@ -5,6 +5,16 @@ A type 4 message is essentially a type 3 message that stores resistace values in
 Storing actual raw data instead of the temperature values is useful for converting data between the different fall rate equations and applying resistance offsets when calibrating hardware configurations.
 Type 4 messages are intended to be used during the calibration stage of a setup.
 
+Type 4 resistance points are 27 bit values N, ohms = (N - 1000000) / 1000.
+Profiles made from files that have no resistances, e.g. EDF files that only hold
+temperatures, store the temperatures in the same points as
+celsius = (N - 500000) / 1000 instead of resistances made up from them. These
+values are below 1000000, a negative resistance that a thermistor can not have,
+so a first point below 1000000 tells the decoder the points are temperatures.
+`BinDecoder::hasTemperaturePoints()` and `XBTProfile::hasResistancePoints()`
+tell which kind of points a profile holds. Decoders older than this change
+read such points as negative resistances.
+
 
 
 Disclaimer

@@ -267,6 +267,7 @@ double XBTProbe::getCoefficientA(int probeType) {
             A = _SIPPICAN_T4_OLD_COEFFICIENT_A;
             break;
         case SIPPICAN_T4:
+            A = _SIPPICAN_T4_COEFFICIENT_A;
             break;
         case SIPPICAN_T5:
             A = _SIPPICAN_T5_COEFFICIENT_A;
@@ -393,6 +394,7 @@ double XBTProbe::getCoefficientA(int probeType) {
                 B = _SIPPICAN_T4_OLD_COEFFICIENT_B;
                 break;
             case SIPPICAN_T4:
+                B = _SIPPICAN_T4_COEFFICIENT_B;
                 break;
             case SIPPICAN_T5:
                 B = _SIPPICAN_T5_COEFFICIENT_B;
@@ -517,6 +519,7 @@ double XBTProbe::getMaxDepth(int probeType ) {
                 maxDepth = _SIPPICAN_T4_OLD_MAX_DEPTH;
                 break;
             case SIPPICAN_T4:
+                maxDepth = _SIPPICAN_T4_MAX_DEPTH;
                 break;
             case SIPPICAN_T5:
                 maxDepth = _SIPPICAN_T5_MAX_DEPTH;
@@ -641,6 +644,7 @@ std::string XBTProbe::getProbeDescription(int probeType ) {
                 probeDescription = _SIPPICAN_T4_OLD_DESCRIPTION;
                 break;
             case SIPPICAN_T4:
+                probeDescription = _SIPPICAN_T4_DESCRIPTION;
                 break;
             case SIPPICAN_T5:
                 probeDescription = _SIPPICAN_T5_DESCRIPTION;

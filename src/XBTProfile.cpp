@@ -10,6 +10,7 @@
 #include <iostream>
 #include <algorithm>
 #include <string>
+#include <sstream>
 #include "MessageType.h"
 #include "XBTResistanceToTemperatureConverter.h"
 
@@ -580,6 +581,7 @@ std::string XBTProfile::toString() {
             + "Sequence#=" + std::to_string(getSequenceNumber()) + "\n"
             + "date=" + std::to_string(getMonth()) + "/" + std::to_string(getDay()) + "/" + std::to_string(getYear()) + "\n"
             + "time=" + std::to_string(getHour()) + ":" + std::to_string(getMinute()) + "\n"
+            + "Second=" + std::to_string(getSecond()) + "\n"
             + "ShipName=" + getShipName() + "\n"
             + "Lloyds=" + std::to_string(getLloyds()) + "\n"
             + "Unique tag=" + intToHexString((getUniqueTag())) + "\n"
@@ -617,10 +619,30 @@ std::string XBTProfile::toString() {
             + "Email=" + getRiderEmails() + "\n"
             + "Phone=" + getRiderPhones() + "\n"
             + "Institution=" + getRiderInstitutions() + "\n"
-            + "index,temperature\n";
-    for (unsigned int i = 0; i < tempPoints.size(); i++) {
-        str += std::to_string(i) + "," + std::to_string(tempPoints[i]) + "\n";
-    }//end for
+            + "Salinity=" + std::to_string(getSalinity()) + "\n";
+
+    bool isType4 = getNewMessageType() == MessageType::MESSAGE_TYPE_4;
+    if (isType4)
+        str += "Sea Resistance=" + std::to_string(getSeaSurfaceResistance()) + "\n";
+
+    // one line per EDF header line, as the text can hold several
+    std::istringstream edfLines(getEDFText());
+    std::string edfLine;
+    while (std::getline(edfLines, edfLine))
+        str += "EDF text=" + edfLine + "\n";
+
+    if (isType4) {
+        std::vector<double> resPoints = getResistancePoints();
+        str += "index,temperature,resistance\n";
+        for (unsigned int i = 0; i < tempPoints.size() && i < resPoints.size(); i++) {
+            str += std::to_string(i) + "," + std::to_string(tempPoints[i]) + "," + std::to_string(resPoints[i]) + "\n";
+        }//end for
+    } else {
+        str += "index,temperature\n";
+        for (unsigned int i = 0; i < tempPoints.size(); i++) {
+            str += std::to_string(i) + "," + std::to_string(tempPoints[i]) + "\n";
+        }//end for
+    }//end if
 
     return str;
 

@@ -16,6 +16,12 @@ tell which kind of points a profile holds. Decoders older than this change
 read such points as negative resistances.
 
 
+The `tools` directory holds command line programs built on the library, they are built and installed with it,
+see [Tools](#tools) for how to use them.
+- **bin2ascii** prints a binary profile as text, an AMVERSEAS ASCII listing, an EDF or the NDC format.
+- **edf2bin** converts an export data file (EDF) from WinMK21, the MK21 software or bin2ascii to a binary profile.
+- **editbin** prints and edits the fields and points of a binary profile and changes its message type.
+
 
 Disclaimer
 ==========
@@ -116,6 +122,106 @@ make
 `make clean` and `make distclean` work as they do on Linux. To use another compiler set GENERATOR,
 e.g. `set GENERATOR=Ninja` from a Visual Studio developer command prompt, or `set GENERATOR=MinGW Makefiles`
 for MinGW.
+
+-----------------------------------
+**TOOLS**
+------------------------------------
+The tools are installed next to each other, in "/usr/local/bin" on Linux and macOS and in
+"C:/Program Files/xbtbinfileutils/bin" on Windows, and can be run from `build/bin` (`build\bin\Release` on
+Windows) without installing them. The examples use `profile.bin`, a type 3 Deep Blue profile found in
+`tools/xbtbin2ascii`. Every tool reads standard input and writes standard output so they can be chained
+with pipes. In a Windows command prompt redirect the input instead of using `cat`, e.g.
+`bin2ascii 2 < profile.bin`.
+
+### bin2ascii
+
+Prints a binary profile as text.
+```bash
+bin2ascii file.bin [format] [salinity]
+cat file.bin | bin2ascii [format] [salinity]
+```
+| format | output |
+|---|---|
+| 0 | AMVERSEAS ASCII listing of the fields and points (default) |
+| 1 | AOML EDF, depths, temperatures and sound velocities. edf2bin reads it back |
+| 2 | AMVERSEAS ASCII NDC format |
+
+The salinity in PSU is used for the sound velocities of the EDF, 35.0 when it is not given.
+
+```bash
+# list the fields and points
+bin2ascii profile.bin
+
+# write an EDF with a salinity of 34.4
+bin2ascii profile.bin 1 34.4 > profile.edf
+
+# NDC format from standard input
+cat profile.bin | bin2ascii 2
+```
+The listing starts like this
+```
+Call Sign                      | 9HA2072
+Latitude                       | 32 35.90 N
+Longitude                      | 047 29.01 W
+Transect Name                  | AX07
+```
+
+### edf2bin
+
+Converts an export data file (EDF) to a binary profile. It reads the EDFs written by WinMK21, the MK21
+software and bin2ascii.
+```bash
+edf2bin [options] [input.edf | -]
+```
+The EDF is read from standard input when no file or `-` is given and the binary is written to standard
+output unless `-o FILE` is used. `-T`/`--type` picks the message type, 1 to 4 (default 3). Only type 4
+keeps the resistances and the EDF header lines, types 1 to 3 store the temperatures. EDFs do not hold the
+ship and environment fields of a binary profile, options like `-c` (call sign), `-s` (ship name), `-i`
+(IMO number), `-l` (SOOP line) and `--ship-speed` add them. `edf2bin -h` lists every option.
+
+```bash
+# convert an EDF from the MK21
+edf2bin TD_00001.EDF -o TD_00001.bin
+
+# keep the resistances, message type 4
+edf2bin --type 4 TD_00001.EDF -o TD_00001.bin
+
+# add the ship information the EDF does not hold
+edf2bin -c 9HA2072 -s "CMA CGM MOLIERE" -i 9401099 -l AX07 --ship-speed 8.2 profile.edf -o profile.bin
+
+# standard input to standard output, -q leaves out the warnings
+cat TD_00001.EDF | edf2bin -q -c WTEC > TD_00001.bin
+```
+See [tools/edf2bin/README.md](tools/edf2bin/README.md) for every option and what each message type stores.
+
+### editbin
+
+Prints or edits a binary profile, a C++ port of the Java EditBinFile program with the same switches.
+```bash
+editbin -i input.bin [-o output.bin] [switches]
+```
+Without `-o` the profile is printed as text, its fields as `name=value` lines and then its points as
+`index,depth,resistance,temperature`. With `-o` the edited profile is written to that file. `-i -` reads
+standard input and `-o -` writes standard output. `editbin -help` lists every switch, e.g. `-callsign`,
+`-shipname`, `-transectname`, `-sequencenum`, `-latitude`, `-longitude`, the date and time switches
+`-year` to `-minute`, `-probetype`, `-recorder`, `-temps` and `-res`.
+
+```bash
+# print the fields and points
+editbin -i profile.bin
+
+# change the call sign, the transect and the sequence number
+editbin -i profile.bin -callsign WTEC -transectname AX08 -sequencenum 5 -o edited.bin
+
+# change the ship name in a pipe
+cat profile.bin | editbin -i - -shipname "OLEANDER" -o - > edited.bin
+
+# change the message type to 4, the temperatures are converted to resistances
+editbin -i profile.bin -messagetype 4 -o type4.bin
+```
+When `-messagetype` moves a profile into or out of type 4 the points are converted between temperatures and
+resistances. Temperatures stored in types 1 to 3 are limited to -4.00 to 36.94 °C. See
+[tools/editxbtbin/README.md](tools/editxbtbin/README.md) for every switch.
 
 **ECLIPSE**
 

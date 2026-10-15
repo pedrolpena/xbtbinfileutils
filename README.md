@@ -32,67 +32,95 @@ DOC or the United States Government.
 -----------------------------------
 **COMPILING AND USING THE LIBRARY**
 ------------------------------------
-This project was written using elcipse Version: 2019-06 (4.12.0) so you should be able to make changes 
-pretty easily this way. The makefiles that are in the Release and Debug directories were created by eclipse.
+The library and the tools in the `tools` directory (edf2bin, editxbtbin and xbtbin2ascii) are built
+and installed together with CMake 3.10 or newer and a C++ compiler.
 
-To compile under debian bases linux without eclipse.
-install make cmake git and g++
+To compile under debian based linux install make, cmake, git and g++
 ```bash
 sudo apt update
 sudo apt install make cmake git g++
 ```
+On macOS install the Xcode command line tools and cmake, e.g. `xcode-select --install` and `brew install cmake`.
+
 Clone the repository
 ```bash
 git clone https://github.com/pedrolpena/xbtbinfileutils.git
-```
-Create a seperate make project, create a build directory and a unix sub directory and run cmake.
-
-```bash
 cd xbtbinfileutils
-mkdir -p build
-cd build
 ```
-Now you can create a makefile project.
-```bash
-cmake ../../
-```
-To compile issue the make command
+To compile the library and the tools issue the make command
 ```bash
 make
 ```
+The library and tools are built in the `build` directory, the tools can be run from `build/bin`.
 
-To install 
+To install
 ```bash
 sudo make install
 ```
-The development headers will be installed in "/usr/local/include/xbtbinfileutils" and the library
-will be installed in "/usr/local/lib/xbtbinfileutils/".
+The development headers will be installed in "/usr/local/include/xbtbinfileutils", the library
+in "/usr/local/lib" and the tools in "/usr/local/bin".
 
 To uninstall issue the following command.
 ```bash
 sudo make uninstall
 ```
 
-To compile under Windows, make sure you have Cmake, Ninja and MinGW installed and in the path.
+The top level Makefile is a wrapper around CMake and takes these optional settings
+```bash
+make PREFIX=$HOME/.local                            # install somewhere else
+make BUILD_TYPE=Debug                               # debug build
+make CMAKE_ARGS=-DXBTBINFILEUTILS_BUILD_TOOLS=OFF   # only build the library
+make distclean                                      # remove the build directory
+```
+The settings are read the first time the build directory is configured, run `make distclean`
+before changing them.
 
-```windows
+You can still use CMake directly, e.g.
+```bash
 mkdir build
 cd build
-mkdir win
-cd win
-cmake -G"Ninja" ..\
-ninja
+cmake ..
+make
+sudo make install
 ```
-Should have created libxbtbinfileutils.dll and libxbtbinfileutils.dll.a
+Each tool can also be built on its own against an installed library, see the README in its directory.
 
-To install open a command prompt with Admin privledges.
+To compile under Windows install CMake and Visual Studio or the Build Tools for Visual Studio with the
+"Desktop development with C++" workload, MinGW and GNU make are not needed. From a command prompt in
+the xbtbinfileutils directory issue the make command, it runs make.bat
 ```windows
-ninja install
+make
 ```
-The development headers will be installed in "C:/Program Files (x86)/xbtbinfileutils/include/xbtbinfileutils" or
-"C:/Program Files/xbtbinfileutils/include/xbtbinfileutils" and the library will be installed in "C:/Program Files (x86)/xbtbinfileutils/lib/xbtbinfileutils" or "C:/Program Files/xbtbinfileutils/lib/xbtbinfileutils"
+In PowerShell use `.\make` instead of `make`. This builds xbtbinfileutils.dll, its import library
+xbtbinfileutils.lib and the tools with the newest Visual Studio CMake finds, the tools and the dll are
+in build\bin\Release.
+
+To install open a command prompt with Admin privileges.
+```windows
+make install
+```
+The development headers will be installed in "C:/Program Files/xbtbinfileutils/include/xbtbinfileutils",
+the dll and the tools in "C:/Program Files/xbtbinfileutils/bin" and the import library in
+"C:/Program Files/xbtbinfileutils/lib". Add the bin directory to the PATH to run the tools from anywhere.
 
 To uninstall issue the following command
 ```windows
-ninja uninstall
+make uninstall
 ```
+The settings are environment variables on Windows, e.g.
+```windows
+set PREFIX=C:\xbtbinfileutils
+set BUILD_TYPE=Debug
+make
+```
+`make clean` and `make distclean` work as they do on Linux. To use another compiler set GENERATOR,
+e.g. `set GENERATOR=Ninja` from a Visual Studio developer command prompt, or `set GENERATOR=MinGW Makefiles`
+for MinGW.
+
+**ECLIPSE**
+
+This project was written using eclipse Version: 2019-06 (4.12.0) so you should be able to make changes
+pretty easily this way. The makefiles that are in the Release and Debug directories were created by eclipse's
+managed build and are independent of the top level Makefile. The `tools` and `build` directories are
+not part of the library, if the eclipse project builds every source folder exclude them from the build
+(right click the folder > Resource Configurations > Exclude from Build...).

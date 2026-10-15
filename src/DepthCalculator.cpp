@@ -127,8 +127,9 @@ DepthCalculator::DepthCalculator(XBTProfile &xBTProfile, int recorderType, int p
  */
 std::vector<std::vector<double> > DepthCalculator::getDepthsAndTemperaturePointsOneMeterResolution() {
 	std::vector<std::vector<double> > depthsAndTemps = getDepthsAndTemperaturePoints();
-	double inputTemps[numberOfMeasurements];
-	double inputDepths[numberOfMeasurements];
+	// std::vector instead of variable length arrays, MSVC has none
+	std::vector<double> inputTemps(numberOfMeasurements);
+	std::vector<double> inputDepths(numberOfMeasurements);
 	int finalDepth = (int) depthsAndTemps[numberOfMeasurements - 1][0];
 	std::vector<std::vector<double> > depthsAndTempsOneMeterResolution(
 			finalDepth, std::vector<double>(2));
@@ -140,7 +141,7 @@ std::vector<std::vector<double> > DepthCalculator::getDepthsAndTemperaturePoints
 		inputTemps[i] = depthsAndTemps[i][1];
 	} //end for
 
-	double oneMeterDepths[finalDepth];
+	std::vector<double> oneMeterDepths(finalDepth);
 
 	//generate array of depths used by the interpolator to generate temps
 	for (int i = 0; i < finalDepth; i++) { // place depths
@@ -149,7 +150,7 @@ std::vector<std::vector<double> > DepthCalculator::getDepthsAndTemperaturePoints
 	} //end for
 
 	// holds the result
-	double oneMeterTemps[finalDepth];
+	std::vector<double> oneMeterTemps(finalDepth);
 
 	// this one element array holds the number of points
 	int inputSize[] = { numberOfMeasurements };
@@ -158,8 +159,8 @@ std::vector<std::vector<double> > DepthCalculator::getDepthsAndTemperaturePoints
 	mlinterp::interp(
 
 	  inputSize,   finalDepth,
-	 inputTemps,   oneMeterTemps,
-	inputDepths,   oneMeterDepths);
+	 inputTemps.data(),   oneMeterTemps.data(),
+	inputDepths.data(),   oneMeterDepths.data());
 
 	//copy results to a 2 dimensional vector;
 	for (int i = 0; i < finalDepth; i++) {

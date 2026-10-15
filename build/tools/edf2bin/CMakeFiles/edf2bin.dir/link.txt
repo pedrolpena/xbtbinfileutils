@@ -1,0 +1,1 @@
+/usr/bin/c++ -Os CMakeFiles/edf2bin.dir/src/edf2bin.cpp.o -o ../../bin/edf2bin  -Wl,-rpath,/home/pedro/Downloads/src/xbtbinfileutils/build: ../../libxbtbinfileutils.so.1 

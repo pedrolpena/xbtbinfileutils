@@ -1,0 +1,1 @@
+/usr/bin/c++ -Os CMakeFiles/editbin.dir/EditBinFile.cpp.o -o ../../bin/editbin  -Wl,-rpath,/home/pedro/Downloads/src/xbtbinfileutils/build: ../../libxbtbinfileutils.so.1 

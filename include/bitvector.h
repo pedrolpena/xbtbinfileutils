@@ -32,6 +32,8 @@
 #include <numeric>
 #include <string>
 #include <cstring>
+// MSVC only knows the not, and and or keywords used below from this header.
+#include <iso646.h>
 #include "__aux.h"
 #include "utility.h"
 
@@ -1149,8 +1151,11 @@ namespace std {
 
 template <class Allocator>
 struct hash<stdex::basic_bitvector<Allocator>>
-	: unary_function<stdex::basic_bitvector<Allocator>, size_t>
 {
+	// std::unary_function is gone from C++17 on, MSVC removes it.
+	typedef stdex::basic_bitvector<Allocator> argument_type;
+	typedef size_t result_type;
+
 	size_t operator()(stdex::basic_bitvector<Allocator> const& v) const
 		noexcept
 	{

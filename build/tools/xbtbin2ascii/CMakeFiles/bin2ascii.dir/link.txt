@@ -1,0 +1,1 @@
+/usr/bin/c++ -Os CMakeFiles/bin2ascii.dir/src/bin2ascii.cpp.o -o ../../bin/bin2ascii  -Wl,-rpath,/home/pedro/Downloads/src/xbtbinfileutils/build: ../../libxbtbinfileutils.so.1 
